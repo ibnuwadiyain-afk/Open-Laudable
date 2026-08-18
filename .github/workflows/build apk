@@ -1,0 +1,90 @@
+name: Build Static Web Files and Package as APK (Capacitor)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Remove broken private package and engine restrictions
+        run: |
+          sed -i '/"@openlovable-sh\/supabase-management-js"/d' package.json
+          rm -f package-lock.json
+          sed -i '/"engines": {/,/}/d' package.json
+
+      - name: Install dependencies (skip post-install scripts)
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Create stub for missing Supabase module
+        run: |
+          mkdir -p src/empty
+          echo "export default {};" > src/empty/supabase-stub.js
+          mkdir -p src/supabase_admin
+          echo "export const createSupabaseManagementClient = () => ({});" > src/supabase_admin/supabase_management_client.js
+
+      - name: Create Vite config for web-only build
+        run: |
+          cat > vite.config.web.js << 'EOF'
+          import { defineConfig } from 'vite';
+          import react from '@vitejs/plugin-react';
+          import path from 'path';
+          export default defineConfig({
+            plugins: [react()],
+            resolve: {
+              alias: {
+                '@': path.resolve(__dirname, './src'),
+                '@openlovable-sh/supabase-management-js': path.resolve(__dirname, './src/empty/supabase-stub.js'),
+              },
+            },
+            build: {
+              outDir: 'dist',
+              emptyOutDir: true,
+              rollupOptions: {
+                external: ['electron', 'fs', 'path', 'child_process'],
+              },
+            },
+          });
+          EOF
+
+      - name: Build static assets with Vite
+        run: |
+          npx vite build --config vite.config.web.js
+
+      # ---------- New Capacitor steps ----------
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Capacitor and Android platform
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init OpenLaudable com.openlaudable.app --web-dir dist
+          npx cap add android
+          npx cap sync
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenLaudable-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
