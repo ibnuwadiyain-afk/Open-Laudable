@@ -1,4 +1,4 @@
-name: Build Static Files
+name: Build Static Web Files
 
 on:
   push:
@@ -6,8 +6,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Use Linux to avoid Windows permission issues
-    
+    runs-on: ubuntu-latest  # Linux avoids Windows permission issues
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,16 +19,20 @@ jobs:
             echo "Removing broken dependency..."
             sed -i '/"@openlovable-sh\/supabase-management-js"/d' package.json
           fi
+          # Also remove from package-lock.json if it exists
+          if [ -f package-lock.json ]; then
+            sed -i '/"@openlovable-sh\/supabase-management-js"/d' package-lock.json
+          fi
 
-      - name: Install dependencies
+      - name: Install dependencies (ignore engines and scripts)
         run: |
-          npm install --no-audit --no-fund --ignore-scripts
+          npm install --ignore-engines --ignore-scripts --no-audit --no-fund
 
-      - name: Build the static web app
+      - name: Build static assets
         run: |
           npm run build || npx vite build
 
-      - name: Upload build artifacts
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist
