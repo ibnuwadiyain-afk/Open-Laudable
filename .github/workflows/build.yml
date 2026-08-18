@@ -1,17 +1,18 @@
-name: Build Static Files
-on: push
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Checkout code
+        uses: actions/checkout@v4   # Updated to v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4 # Updated to v4
         with:
-          node-version: 20
-      - run: npm install
-      - run: npm run build
-      - uses: actions/upload-artifact@v3
+          node-version: '20'       # Or '24' if your project supports it
+
+      - name: Run script with GitHub Script
+        uses: actions/github-script@v7
         with:
-          name: dist
-          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}  # Required token
+          script: |
+            // Your script logic here
