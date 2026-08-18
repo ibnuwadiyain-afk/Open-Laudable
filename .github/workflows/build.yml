@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Linux avoids Windows permission issues
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -14,19 +14,21 @@ jobs:
 
       - name: Remove broken private package
         run: |
-          # Remove the missing package from package.json
-          if grep -q "@openlovable-sh/supabase-management-js" package.json; then
-            echo "Removing broken dependency..."
-            sed -i '/"@openlovable-sh\/supabase-management-js"/d' package.json
-          fi
-          # Also remove from package-lock.json if it exists
+          sed -i '/"@openlovable-sh\/supabase-management-js"/d' package.json
           if [ -f package-lock.json ]; then
             sed -i '/"@openlovable-sh\/supabase-management-js"/d' package-lock.json
           fi
 
-      - name: Install dependencies (ignore engines and scripts)
+      - name: Relax engine requirements
         run: |
-          npm install --ignore-engines --ignore-scripts --no-audit --no-fund
+          # Remove the entire "engines" block to bypass version checks
+          sed -i '/"engines": {/,/}/d' package.json
+          # Alternatively, change npm requirement to ">=10" (uncomment next line if preferred)
+          # sed -i 's/"npm": "11.8.0"/"npm": ">=10"/g' package.json
+
+      - name: Install dependencies
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
 
       - name: Build static assets
         run: |
