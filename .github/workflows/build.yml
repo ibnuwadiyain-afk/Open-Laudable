@@ -1,4 +1,4 @@
-name: Build Static Web Files
+name: Build Static Web Files (Android Ready)
 
 on:
   push:
@@ -6,31 +6,63 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Linux avoids Windows permission issues
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Remove broken private package
+      - name: Remove broken private package and engine restrictions
         run: |
-          # Remove from package.json
+          # Remove the missing dependency from package.json
           sed -i '/"@openlovable-sh\/supabase-management-js"/d' package.json
-          # Optionally, remove the lockfile so npm install regenerates it cleanly
+          # Delete lockfile so npm install regenerates it cleanly
           rm -f package-lock.json
-
-      - name: Remove engine restrictions (optional but safe)
-        run: |
+          # Remove the engines block to avoid npm version mismatch
           sed -i '/"engines": {/,/}/d' package.json
 
-      - name: Install dependencies (regenerates lockfile)
+      - name: Install dependencies (skip post-install scripts)
         run: |
           npm install --ignore-scripts --no-audit --no-fund
 
+      - name: Create stub for missing Supabase module
+        run: |
+          mkdir -p src/empty
+          echo "export default {};" > src/empty/supabase-stub.js
+          # Also create a stub at the expected import path if needed
+          mkdir -p src/supabase_admin
+          echo "export const createSupabaseManagementClient = () => ({});" > src/supabase_admin/supabase_management_client.js
+
+      - name: Create Vite config for web-only build
+        run: |
+          cat > vite.config.web.js << 'EOF'
+          import { defineConfig } from 'vite';
+          import react from '@vitejs/plugin-react';
+          import path from 'path';
+          export default defineConfig({
+            plugins: [react()],
+            resolve: {
+              alias: {
+                // Resolve '@' to src
+                '@': path.resolve(__dirname, './src'),
+                // Mock the missing Supabase package
+                '@openlovable-sh/supabase-management-js': path.resolve(__dirname, './src/empty/supabase-stub.js'),
+              },
+            },
+            build: {
+              outDir: 'dist',
+              emptyOutDir: true,
+              rollupOptions: {
+                // Externalize Electron modules (they aren't needed for web)
+                external: ['electron', 'fs', 'path', 'child_process'],
+              },
+            },
+          });
+          EOF
+
       - name: Build static assets with Vite
         run: |
-          # Try the original build, but fallback to direct Vite build if it fails
-          npm run build || npx vite build
+          npx vite build --config vite.config.web.js
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
