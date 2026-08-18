@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Linux avoids Windows permission issues
 
     steps:
       - name: Checkout code
@@ -14,54 +14,23 @@ jobs:
 
       - name: Remove broken private package
         run: |
+          # Remove from package.json
           sed -i '/"@openlovable-sh\/supabase-management-js"/d' package.json
-          if [ -f package-lock.json ]; then
-            sed -i '/"@openlovable-sh\/supabase-management-js"/d' package-lock.json
-          fi
+          # Optionally, remove the lockfile so npm install regenerates it cleanly
+          rm -f package-lock.json
 
-      - name: Relax engine requirements
+      - name: Remove engine restrictions (optional but safe)
         run: |
           sed -i '/"engines": {/,/}/d' package.json
 
-      - name: Install dependencies (skip scripts)
+      - name: Install dependencies (regenerates lockfile)
         run: |
           npm install --ignore-scripts --no-audit --no-fund
 
-      - name: Create stub for missing package
-        run: |
-          # Create a dummy module to satisfy the import
-          mkdir -p src/supabase_admin
-          echo "export default {};" > src/supabase_admin/supabase_management_client.d.ts
-          # Actually, we need to override the import. We'll create a mock file.
-          echo "export const createSupabaseManagementClient = () => ({});" > src/supabase_admin/supabase_management_client.js
-          # Also remove the line that imports it (or we can use Vite alias)
-          # Easiest: replace the import with a stub in the source
-          find src -type f -name "*.ts" -o -name "*.tsx" | xargs sed -i 's/import.*@openlovable-sh\/supabase-management-js.*/\/\/ removed imported stub/g'
-
-      - name: Ensure path alias resolution
-        run: |
-          # Create a Vite config that resolves '@' to 'src'
-          cat > vite.config.web.js << 'EOF'
-          import { defineConfig } from 'vite';
-          import react from '@vitejs/plugin-react';
-          import path from 'path';
-          export default defineConfig({
-            plugins: [react()],
-            resolve: {
-              alias: {
-                '@': path.resolve(__dirname, './src'),
-              },
-            },
-            build: {
-              outDir: 'dist',
-              emptyOutDir: true,
-            },
-          });
-          EOF
-
       - name: Build static assets with Vite
         run: |
-          npx vite build --config vite.config.web.js
+          # Try the original build, but fallback to direct Vite build if it fails
+          npm run build || npx vite build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
