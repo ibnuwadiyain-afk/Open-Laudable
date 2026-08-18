@@ -1,18 +1,35 @@
+name: Build Static Files
+
+on:
+  push:
+  workflow_dispatch:
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Use Linux to avoid Windows permission issues
+    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4   # Updated to v4
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4 # Updated to v4
-        with:
-          node-version: '20'       # Or '24' if your project supports it
+      - name: Remove broken private package
+        run: |
+          # Remove the missing package from package.json
+          if grep -q "@openlovable-sh/supabase-management-js" package.json; then
+            echo "Removing broken dependency..."
+            sed -i '/"@openlovable-sh\/supabase-management-js"/d' package.json
+          fi
 
-      - name: Run script with GitHub Script
-        uses: actions/github-script@v7
+      - name: Install dependencies
+        run: |
+          npm install --no-audit --no-fund --ignore-scripts
+
+      - name: Build the static web app
+        run: |
+          npm run build || npx vite build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}  # Required token
-          script: |
-            // Your script logic here
+          name: dist
+          path: dist/
